@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Upload, Save, Tag, PenTool, Hash, Info, Image as ImageIcon } from 'lucide-react';
+import { X, Upload, Save, Tag, PenTool, Hash, Info, Image as ImageIcon, Package } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { Product } from '../types';
@@ -230,6 +230,18 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
                 <span className="icon"><Hash size={18} /></span>
                 <input type="number" placeholder="Ancien prix" className="input-field text-gray-400 line-through !pl-12" value={formData.oldPrice} onChange={e => setFormData({ ...formData, oldPrice: e.target.value })} />
               </div>
+            </div>
+
+            <div className="input-with-icon">
+              <span className="icon text-gray-400"><Package size={18} /></span>
+              <input 
+                required 
+                type="number" 
+                placeholder="Quantité en stock" 
+                className="input-field !pl-12" 
+                value={formData.stock} 
+                onChange={e => setFormData({ ...formData, stock: e.target.value })} 
+              />
             </div>
 
             <div className="input-with-icon items-start">

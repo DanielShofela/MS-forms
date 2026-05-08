@@ -18,7 +18,8 @@ import {
   Smartphone,
   MapPin,
   RefreshCcw,
-  LogOut
+  LogOut,
+  Package
 } from 'lucide-react';
 
 export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
@@ -126,7 +127,7 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
       <header className="bg-dark text-white px-6 py-6 flex justify-between items-center sticky top-0 z-20">
         <div className="flex flex-col">
           <h1 className="text-xl">Dashboard Admin</h1>
-          <span className="text-xs text-gray-400">Maison Smart | Back-office</span>
+          <span className="text-xs text-gray-400">MAISON SMART + | Back-office</span>
         </div>
         <div className="flex gap-2">
           <button 
@@ -305,9 +306,17 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
               <div className="flex flex-col justify-between flex-1 py-1">
                 <div>
                   <h3 className="text-sm font-bold line-clamp-1">{product.name}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-brand font-bold">{formatPrice(product.price)}</span>
-                    {product.oldPrice && <span className="text-[10px] text-gray-400 line-through">{formatPrice(product.oldPrice)}</span>}
+                  <div className="flex items-center justify-between mt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand font-bold">{formatPrice(product.price)}</span>
+                      {product.oldPrice && <span className="text-[10px] text-gray-400 line-through">{formatPrice(product.oldPrice)}</span>}
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+                      <Package size={10} className="text-gray-400" />
+                      <span className={cn("font-bold", product.stock <= 5 ? "text-red-500" : "text-gray-600")}>
+                        {product.stock} en stock
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2">

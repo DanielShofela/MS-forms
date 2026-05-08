@@ -12,7 +12,7 @@ import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 
 const DUMMY_PRODUCT: Product = {
   id: 'ref-smart-101',
-  name: "Réfrigérateur Intelligent Maison Smart - 450L",
+  name: "Réfrigérateur Intelligent MAISON SMART + - 450L",
   description: "Gardez vos aliments frais plus longtemps avec la technologie Smart Cooling. Design élégant en acier inoxydable, faible consommation d'énergie (A+++), et contrôle tactile intuitif.",
   price: 245000,
   oldPrice: 320000,
@@ -106,7 +106,7 @@ export default function App() {
             <div className="bg-dark text-white p-4 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center font-bold">M</div>
-                <span className="font-display font-bold tracking-tight uppercase">Maison Smart</span>
+                <span className="font-display font-bold tracking-tight uppercase">MAISON SMART +</span>
               </div>
               <button 
                 onClick={() => isAdminLoggedIn ? setView('admin') : setShowAdminLogin(true)}
@@ -192,7 +192,7 @@ export default function App() {
                   Se connecter avec Google
                 </button>
                 <p className="text-[10px] text-center text-gray-400 uppercase tracking-widest mt-2">
-                  Protégé par Maison Smart Security
+                  Protégé par MAISON SMART + Security
                 </p>
               </form>
             </motion.div>
