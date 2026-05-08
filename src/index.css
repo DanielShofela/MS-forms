@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", sans-serif;
+  
+  --color-brand: #ff6a00;
+  --color-brand-dark: #e65f00;
+  --color-dark: #111111;
+  --color-light: #f5f5f5;
+}
+
+@layer base {
+  body {
+    @apply bg-light text-dark font-sans antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-bold;
+  }
+}
+
+.marketing-card {
+  @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-4;
+}
+
+.cta-button {
+  @apply bg-brand text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-brand/20 active:scale-95 transition-all text-center flex items-center justify-center gap-2;
+}
+
+.input-field {
+  @apply w-full px-4 py-3.5 rounded-2xl border border-gray-200 focus:border-brand focus:ring-4 focus:ring-brand/10 outline-none transition-all bg-white text-dark placeholder:text-gray-400;
+}
+
+.input-with-icon {
+  @apply relative flex items-center;
+}
+
+.input-with-icon .icon {
+  @apply absolute left-4 text-gray-400 pointer-events-none;
+}
+
+.input-with-icon input, .input-with-icon textarea {
+  @apply pl-12;
+}
+
+.admin-card {
+  @apply bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow;
+}

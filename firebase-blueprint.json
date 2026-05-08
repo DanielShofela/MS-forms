@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "Order": {
+      "title": "Order",
+      "description": "A customer order from the direct sales landing page.",
+      "type": "object",
+      "properties": {
+        "customerName": { "type": "string", "description": "Full name of the customer" },
+        "phone": { "type": "string", "description": "WhatsApp phone number" },
+        "city": { "type": "string", "description": "City or commune for delivery" },
+        "address": { "type": "string", "description": "Precise delivery address" },
+        "productId": { "type": "string", "description": "ID of the product ordered" },
+        "productName": { "type": "string", "description": "Name of the product" },
+        "quantity": { "type": "integer", "description": "Quantity ordered" },
+        "deliveryMode": { "type": "string", "description": "Chosen delivery method" },
+        "totalPrice": { "type": "number", "description": "Final total price" },
+        "status": { "type": "string", "enum": ["new", "confirmed", "shipping", "delivered"], "description": "Current status of the order" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerName", "phone", "city", "address", "productId", "quantity", "status", "createdAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product sold in the store.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "oldPrice": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "stock": { "type": "integer" },
+        "isPromo": { "type": "boolean" }
+      },
+      "required": ["name", "price", "imageUrl"]
+    }
+  },
+  "firestore": {
+    "orders": {
+      "schema": "Order",
+      "description": "Collection of customer orders."
+    },
+    "products": {
+      "schema": "Product",
+      "description": "Collection of products available."
+    }
+  }
+}

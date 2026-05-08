@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == "digitalsoutien@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Orders
+    match /orders/{orderId} {
+      function isValidOrder(data) {
+        return data.customerName is string && data.customerName.size() <= 100 &&
+               data.phone is string && data.phone.size() <= 20 &&
+               data.city is string && data.city.size() <= 50 &&
+               data.address is string && data.address.size() <= 200 &&
+               data.productId is string &&
+               data.quantity is int && data.quantity > 0 &&
+               data.status in ['new', 'confirmed', 'shipping', 'delivered'] &&
+               data.totalPrice is number;
+      }
+
+      allow create: if isValidOrder(incoming()) && 
+                       incoming().status == 'new' &&
+                       incoming().createdAt == request.time;
+      
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+      
+      allow update: if isAdmin() && 
+                       isValidOrder(incoming()) &&
+                       incoming().updatedAt == request.time;
+      
+      allow delete: if isAdmin();
+    }
+
+    // Products
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admin profiles (only editable by existing admins or via console/custom mechanism)
+    match /admins/{adminId} {
+      allow read: if isSignedIn() && request.auth.uid == adminId;
+    }
+  }
+}
