@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Package, Truck, CheckCircle2, Clock, ChevronLeft, LogOut, ShoppingBag, X, Trash2, Ban } from 'lucide-react';
+import { Package, Truck, CheckCircle2, Clock, ChevronLeft, LogOut, ShoppingBag, X, Trash2, Ban, ShieldCheck } from 'lucide-react';
 import { db, auth } from '../lib/firebase';
 import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { Order } from '../types';
@@ -96,6 +96,13 @@ export default function CustomerOrders({ userEmail, onBack, onLogout }: Customer
       </header>
 
       <div className="flex-1 px-4 py-8">
+        <div className="mb-6 flex items-center gap-3 p-4 bg-blue-50 border border-blue-100 rounded-2xl">
+          <ShieldCheck className="text-blue-500 shrink-0" size={20} />
+          <p className="text-[11px] text-blue-800 leading-tight">
+            Toutes vos commandes et demandes sont transmises directement à l'administrateur pour traitement.
+          </p>
+        </div>
+
         {loading ? (
           <div className="flex flex-col items-center justify-center p-20 gap-4">
             <div className="w-10 h-10 border-4 border-brand border-t-transparent rounded-full animate-spin"></div>
