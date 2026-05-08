@@ -34,6 +34,7 @@ export default function App() {
   const [view, setView] = useState<ViewState>('landing');
   const [lastOrderId, setLastOrderId] = useState<string>('');
   const [user, setUser] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
@@ -41,17 +42,36 @@ export default function App() {
 
   // Authentication observer
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
-      setLoadingAuth(false);
       
       if (u) {
-        if (window.location.hash === '#admin' && u.email === 'digitalsoutien@gmail.com') {
-          setView('admin');
-        } else if (window.location.hash === '#orders') {
-          setView('customerOrders');
+        // Check if user is an admin in Firestore
+        const adminEmail = u.email?.toLowerCase();
+        if (adminEmail === 'digitalsoutien@gmail.com') {
+          setIsAdmin(true);
+          if (window.location.hash === '#admin') setView('admin');
+        } else {
+          try {
+            const { doc, getDoc } = await import('firebase/firestore');
+            const adminDoc = await getDoc(doc(db, 'admins', adminEmail || ''));
+            const isUserAdmin = adminDoc.exists();
+            setIsAdmin(isUserAdmin);
+            if (isUserAdmin && window.location.hash === '#admin') {
+              setView('admin');
+            } else if (window.location.hash === '#orders') {
+              setView('customerOrders');
+            }
+          } catch (e) {
+            console.error("Error checking admin status", e);
+            setIsAdmin(false);
+          }
         }
+      } else {
+        setIsAdmin(false);
       }
+      
+      setLoadingAuth(false);
     });
 
     // Fetch products
@@ -81,7 +101,17 @@ export default function App() {
       const result = await signInWithPopup(auth, provider);
       setShowLogin(false);
       
-      if (result.user.email === 'digitalsoutien@gmail.com') {
+      const email = result.user.email?.toLowerCase();
+      
+      // Check admin status immediately after login
+      let isUserAdmin = email === 'digitalsoutien@gmail.com';
+      if (!isUserAdmin && email) {
+        const { doc, getDoc } = await import('firebase/firestore');
+        const adminDoc = await getDoc(doc(db, 'admins', email));
+        isUserAdmin = adminDoc.exists();
+      }
+
+      if (isUserAdmin) {
         setView('admin');
         window.location.hash = 'admin';
       } else {
@@ -110,11 +140,12 @@ export default function App() {
 
   const logout = async () => {
     await signOut(auth);
+    setIsAdmin(false);
     setView('landing');
     window.location.hash = '';
   };
 
-  const isAdminLoggedIn = !!(user && user.email === 'digitalsoutien@gmail.com');
+  const isAdminLoggedIn = !!(user && isAdmin);
 
   // Select the product to show: latest added or specific from hash ?p=id
   const currentProduct = products.length > 0 ? products[0] : DUMMY_PRODUCT;
@@ -191,7 +222,7 @@ export default function App() {
           </motion.div>
         )}
 
-        {view === 'admin' && isAdminLoggedIn && (
+        {view === 'admin' && (isAdmin || user?.email === 'digitalsoutien@gmail.com') && (
           <motion.div 
             key="admin"
             initial={{ opacity: 0 }}
