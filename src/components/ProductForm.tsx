@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Upload, Save, Tag, PenTool, Hash, Info, Image as ImageIcon } from 'lucide-react';
-import { db, storage } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Product } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 
@@ -14,7 +13,6 @@ interface ProductFormProps {
 
 export default function ProductForm({ product, onClose }: ProductFormProps) {
   const [loading, setLoading] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -28,7 +26,6 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
   });
   const [imageUrl, setImageUrl] = useState('');
   const [dragActive, setDragActive] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     if (product) {
@@ -47,52 +44,7 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
     }
   }, [product]);
 
-  const compressImage = (file: File): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 2000;
-          const MAX_HEIGHT = 2000;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          
-          canvas.toBlob(
-            (blob) => {
-              if (blob) resolve(blob);
-              else reject(new Error('Canvas to Blob failed'));
-            },
-            'image/jpeg',
-            0.85 // High quality
-          );
-        };
-      };
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
     let file: File | undefined;
     
     if ('files' in e.target && e.target.files) {
@@ -103,51 +55,31 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
 
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert("L'image est trop lourde. Le maximum autorisé est de 10 Mo.");
+    // Check size (max 500kb for Base64 in Firestore documents comfortably)
+    if (file.size > 800000) {
+      alert("L'image est trop lourde. Veuillez choisir une image de moins de 800 Ko pour optimiser la vitesse.");
       return;
     }
 
-    setIsUploading(true);
-    setUploadProgress(10);
-
-    try {
-      // Affichage immédiat du preview local
-      const previewUrl = URL.createObjectURL(file);
-      setImageUrl(previewUrl);
-
-      console.log("Compression de l'image...");
-      const compressedBlob = await compressImage(file);
-      
-      console.log("Upload HD vers Storage...");
-      const fileRef = ref(storage, `products/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`);
-      setUploadProgress(40);
-      
-      await uploadBytes(fileRef, compressedBlob);
-      const downloadUrl = await getDownloadURL(fileRef);
-      
-      setImageUrl(downloadUrl);
-      console.log("Image sauvegardée sur le cloud.");
-      setUploadProgress(100);
-    } catch (error) {
-      console.error("Erreur upload image:", error);
-      alert("Erreur lors de l'hébergement de l'image. Veuillez réessayer.");
-      setImageUrl('');
-    } finally {
-      setIsUploading(false);
-    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImageUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Tentative de sauvegarde...", { hasImage: !!imageUrl, formData });
     
-    if (isUploading) {
-      alert("Veuillez attendre que l'image termine l'hébergement HD.");
+    if (!imageUrl || imageUrl.trim() === '') {
+      console.error("Erreur validation: Image manquante");
+      alert("Veuillez importer une image produit. Vous pouvez soit glisser un fichier, soit coller un lien URL.");
       return;
     }
 
-    if (!imageUrl || imageUrl.trim() === '' || imageUrl.startsWith('blob:')) {
-      alert("Veuillez importer une image produit.");
+    if (!formData.name || !formData.price) {
+      alert("Veuillez remplir au moins le nom et le prix du produit.");
       return;
     }
 
@@ -170,6 +102,8 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
         updatedAt: serverTimestamp()
       };
 
+      console.log("Envoi des données à Firestore...", productData);
+
       if (product?.id) {
         await updateDoc(doc(db, 'products', product.id), productData);
       } else {
@@ -178,8 +112,10 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
           createdAt: serverTimestamp()
         });
       }
+      console.log("Sauvegarde réussie !");
       onClose();
     } catch (error) {
+      console.error("Erreur lors de la sauvegarde Firestore:", error);
       handleFirestoreError(error, OperationType.WRITE, 'products');
     } finally {
       setLoading(false);
@@ -230,48 +166,27 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
                   <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                     <button 
                       type="button" 
-                      onClick={() => {
-                        setImageUrl('');
-                      }}
+                      onClick={() => setImageUrl('')}
                       className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white hover:bg-white/40 transition-colors"
                     >
                       <X size={24} />
                     </button>
                   </div>
-                  {isUploading && (
-                    <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-white/20">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${uploadProgress}%` }}
-                        className="h-full bg-brand"
-                      />
-                    </div>
-                  )}
                 </>
               ) : (
                 <>
-                  {isUploading ? (
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="w-12 h-12 border-4 border-brand border-t-transparent rounded-full animate-spin" />
-                      <p className="text-sm font-bold text-gray-500">Traitement HD...</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand">
-                        <Upload size={28} />
-                      </div>
-                      <div className="text-center px-4">
-                        <p className="text-sm font-bold text-dark">Qualité HD (Max 10Mo)</p>
-                        <p className="text-xs text-gray-500 mt-1">Glissez une image haute résolution</p>
-                      </div>
-                    </>
-                  )}
+                  <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand">
+                    <Upload size={28} />
+                  </div>
+                  <div className="text-center px-4">
+                    <p className="text-sm font-bold text-dark">Cliquez ou glissez l'image</p>
+                    <p className="text-xs text-gray-500 mt-1">L'image sera stockée sur nos serveurs</p>
+                  </div>
                   <input 
                     type="file" 
-                    disabled={isUploading}
                     accept="image/*" 
                     onChange={handleImageUpload}
-                    className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                    className="absolute inset-0 opacity-0 cursor-pointer"
                   />
                 </>
               )}
@@ -345,13 +260,11 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
           </div>
 
           <button 
-            disabled={loading || isUploading}
-            className={`cta-button w-full mb-8 relative overflow-hidden ${loading || isUploading ? 'opacity-70' : ''}`}
+            disabled={loading}
+            className={`cta-button w-full mb-8 ${loading ? 'opacity-50' : ''}`}
           >
-            <Save size={20} className="relative z-10" />
-            <span className="relative z-10">
-              {loading ? 'Sauvegarde...' : isUploading ? 'Chargement Image HD...' : 'Sauvegarder le produit'}
-            </span>
+            <Save size={20} />
+            {loading ? 'Enregistrement...' : 'Sauvegarder le produit'}
           </button>
         </form>
       </motion.div>
