@@ -93,7 +93,9 @@ service cloud.firestore {
     // Admin profiles
     match /admins/{email} {
       allow read: if isAdmin();
-      allow create, delete: if isAdmin() && email != "digitalsoutien@gmail.com";
+      allow create, delete: if isSignedIn() && 
+        request.auth.token.email.lower() == "digitalsoutien@gmail.com" && 
+        email != "digitalsoutien@gmail.com";
     }
   }
 }

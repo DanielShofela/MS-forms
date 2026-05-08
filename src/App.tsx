@@ -40,6 +40,9 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
+  const [currentProductIndex, setCurrentProductIndex] = useState(0);
+  const [swipeDirection, setSwipeDirection] = useState(0);
+
   // Authentication observer
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -147,8 +150,22 @@ export default function App() {
 
   const isAdminLoggedIn = !!(user && isAdmin);
 
+  const handleSwipe = (direction: 'left' | 'right') => {
+    if (products.length <= 1) return;
+    
+    setSwipeDirection(direction === 'left' ? 1 : -1);
+    
+    let nextIndex;
+    if (direction === 'left') {
+      nextIndex = (currentProductIndex + 1) % products.length;
+    } else {
+      nextIndex = (currentProductIndex - 1 + products.length) % products.length;
+    }
+    setCurrentProductIndex(nextIndex);
+  };
+
   // Select the product to show: latest added or specific from hash ?p=id
-  const currentProduct = products.length > 0 ? products[0] : DUMMY_PRODUCT;
+  const currentProduct = products.length > 0 ? products[currentProductIndex] : DUMMY_PRODUCT;
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-white shadow-2xl relative">
@@ -188,10 +205,86 @@ export default function App() {
                 <div className="w-8 h-8 border-4 border-brand border-t-transparent rounded-full animate-spin"></div>
               </div>
             ) : (
-              <ProductLanding 
-                product={currentProduct} 
-                onOrderClick={() => setView('form')} 
-              />
+              <div className="relative overflow-x-hidden">
+                <AnimatePresence mode="popLayout" custom={swipeDirection}>
+                  <motion.div
+                    key={currentProduct.id}
+                    custom={swipeDirection}
+                    variants={{
+                      enter: (direction: number) => ({
+                        x: direction > 0 ? '100%' : direction < 0 ? '-100%' : 0,
+                        opacity: 0,
+                        scale: 0.9,
+                        rotate: direction > 0 ? 5 : -5
+                      }),
+                      center: {
+                        x: 0,
+                        opacity: 1,
+                        scale: 1,
+                        rotate: 0,
+                        transition: {
+                          x: { type: "spring", stiffness: 300, damping: 30 },
+                          opacity: { duration: 0.2 },
+                          scale: { duration: 0.4 },
+                          rotate: { duration: 0.4 }
+                        }
+                      },
+                      exit: (direction: number) => ({
+                        x: direction < 0 ? '100%' : '-100%',
+                        opacity: 0,
+                        scale: 0.9,
+                        rotate: direction < 0 ? 5 : -5,
+                        transition: {
+                          x: { type: "spring", stiffness: 300, damping: 30 },
+                          opacity: { duration: 0.2 }
+                        }
+                      })
+                    }}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    drag="x"
+                    dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={0.8}
+                    onDragEnd={(_, info) => {
+                      if (info.offset.x < -50) handleSwipe('left');
+                      else if (info.offset.x > 50) handleSwipe('right');
+                    }}
+                    className="touch-pan-y"
+                  >
+                    <ProductLanding 
+                      product={currentProduct} 
+                      onOrderClick={() => setView('form')} 
+                    />
+                  </motion.div>
+                </AnimatePresence>
+
+                {products.length > 1 && (
+                  <div className="absolute bottom-10 left-0 right-0 flex justify-center gap-2 pointer-events-none">
+                    {products.map((_, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`w-1.5 h-1.5 rounded-full transition-all ${idx === currentProductIndex ? 'bg-brand w-4' : 'bg-gray-300'}`} 
+                      />
+                    ))}
+                  </div>
+                )}
+                
+                {products.length > 1 && currentProductIndex === 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: [0, 1, 0] }}
+                    transition={{ repeat: Infinity, duration: 2 }}
+                    className="absolute top-1/2 right-4 transform -translate-y-1/2 pointer-events-none"
+                  >
+                    <div className="bg-white/80 backdrop-blur-md p-2 rounded-full shadow-lg text-brand">
+                      <motion.div animate={{ x: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>
+                        <ShoppingBag size={20} />
+                      </motion.div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
             )}
           </motion.div>
         )}

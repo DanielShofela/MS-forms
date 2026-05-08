@@ -38,6 +38,7 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [isAddingAdmin, setIsAddingAdmin] = useState(false);
+  const isSuperAdmin = auth.currentUser?.email?.toLowerCase() === 'digitalsoutien@gmail.com';
 
   useEffect(() => {
     const qOrders = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
@@ -490,32 +491,38 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
       ) : (
         /* Admins Section */
         <div className="flex flex-col gap-6 p-4 max-w-2xl mx-auto w-full">
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
-            <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-              <ShieldCheck className="text-brand" size={24} />
-              Ajouter un administrateur
-            </h2>
-            <form onSubmit={addAdmin} className="flex gap-2">
-              <input 
-                type="email"
-                placeholder="Email du nouvel admin..."
-                required
-                className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand/20"
-                value={newAdminEmail}
-                onChange={e => setNewAdminEmail(e.target.value)}
-              />
-              <button 
-                type="submit"
-                disabled={isAddingAdmin}
-                className="p-3 bg-brand text-white rounded-xl shadow-lg shadow-brand/20 active:scale-95 transition-all disabled:opacity-50"
-              >
-                <UserPlus size={24} />
-              </button>
-            </form>
-            <p className="text-[10px] text-gray-400 mt-3 italic">
-              L'email doit être celui utilisé par la personne pour se connecter via Google.
-            </p>
-          </div>
+          {isSuperAdmin ? (
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+              <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <ShieldCheck className="text-brand" size={24} />
+                Ajouter un administrateur
+              </h2>
+              <form onSubmit={addAdmin} className="flex gap-2">
+                <input 
+                  type="email"
+                  placeholder="Email du nouvel admin..."
+                  required
+                  className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand/20"
+                  value={newAdminEmail}
+                  onChange={e => setNewAdminEmail(e.target.value)}
+                />
+                <button 
+                  type="submit"
+                  disabled={isAddingAdmin}
+                  className="p-3 bg-brand text-white rounded-xl shadow-lg shadow-brand/20 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  <UserPlus size={24} />
+                </button>
+              </form>
+              <p className="text-[10px] text-gray-400 mt-3 italic">
+                L'email doit être celui utilisé par la personne pour se connecter via Google.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100 text-sm text-blue-800">
+              Seul l'administrateur principal peut ajouter ou révoquer des accès.
+            </div>
+          )}
 
           <div className="flex flex-col gap-3">
             <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest px-2">Liste des accès</h3>
@@ -548,13 +555,15 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
                     <span className="text-[10px] text-gray-400">Ajouté par: {admin.addedBy || 'Système'}</span>
                   </div>
                 </div>
-                <button 
-                  onClick={() => removeAdmin(admin.email)}
-                  className="p-2 text-gray-300 hover:text-red-500 transition-colors"
-                  title="Révoquer l'accès"
-                >
-                  <Trash2 size={20} />
-                </button>
+                {isSuperAdmin && (
+                  <button 
+                    onClick={() => removeAdmin(admin.email)}
+                    className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                    title="Révoquer l'accès"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

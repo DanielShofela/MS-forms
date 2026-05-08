@@ -12,10 +12,27 @@ interface ProductLandingProps {
 export default function ProductLanding({ product, onOrderClick }: ProductLandingProps) {
   const allImages = [product.imageUrl, ...(product.images || [])].filter(img => img && img.trim() !== '');
   const [selectedImage, setSelectedImage] = React.useState(allImages[0]);
+  const [imageIndex, setImageIndex] = React.useState(0);
 
   React.useEffect(() => {
     setSelectedImage(allImages[0]);
-  }, [product.id]);
+    setImageIndex(0);
+  }, [product.id, allImages.length]);
+
+  // Slideshow effect
+  React.useEffect(() => {
+    if (allImages.length <= 1) return;
+
+    const timer = setInterval(() => {
+      setImageIndex((prev) => (prev + 1) % allImages.length);
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [allImages.length]);
+
+  React.useEffect(() => {
+    setSelectedImage(allImages[imageIndex]);
+  }, [imageIndex, allImages]);
 
   return (
     <div className="flex flex-col gap-6 pb-24">
