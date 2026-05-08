@@ -34,24 +34,31 @@ service cloud.firestore {
     match /orders/{orderId} {
       function isValidOrder(data) {
         return data.customerName is string && data.customerName.size() <= 100 &&
+               data.email is string && data.email.size() <= 100 &&
                data.phone is string && data.phone.size() <= 20 &&
                data.city is string && data.city.size() <= 50 &&
                data.address is string && data.address.size() <= 200 &&
                data.productId is string &&
+               data.productName is string && data.productName.size() <= 200 &&
                data.quantity is int && data.quantity > 0 &&
-               data.status in ['new', 'confirmed', 'shipping', 'delivered'] &&
-               data.totalPrice is number;
+               data.deliveryMode is string && data.deliveryMode in ['standard', 'express'] &&
+               data.status in ['pending', 'processing', 'delivered', 'cancelled'] &&
+               data.totalPrice is number &&
+               data.keys().hasAll(['customerName', 'email', 'phone', 'city', 'address', 'productId', 'productName', 'quantity', 'deliveryMode', 'status', 'totalPrice', 'createdAt']) &&
+               data.keys().size() == 12;
       }
 
       allow create: if isValidOrder(incoming()) && 
-                       incoming().status == 'new' &&
+                       incoming().status == 'pending' &&
                        incoming().createdAt == request.time;
       
-      allow get: if isAdmin();
-      allow list: if isAdmin();
+      allow get: if isAdmin() || (isSignedIn() && existing().email == request.auth.token.email);
+      allow list: if isAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
       
       allow update: if isAdmin() && 
                        isValidOrder(incoming()) &&
+                       (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) || 
+                        incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'phone', 'city', 'address', 'status', 'updatedAt'])) &&
                        incoming().updatedAt == request.time;
       
       allow delete: if isAdmin();
@@ -59,8 +66,22 @@ service cloud.firestore {
 
     // Products
     match /products/{productId} {
+      function isValidProduct(data) {
+        return data.name is string && data.name.size() <= 200 &&
+               data.description is string && data.description.size() <= 1000 &&
+               data.price is number && data.price >= 0 &&
+               (data.oldPrice == null || data.oldPrice is number) &&
+               data.imageUrl is string &&
+               data.stock is int &&
+               data.isPromo is bool &&
+               data.marketingPoints is list &&
+               data.updatedAt == request.time;
+      }
+
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isAdmin() && isValidProduct(incoming()) && incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidProduct(incoming()) && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin();
     }
 
     // Admin profiles (only editable by existing admins or via console/custom mechanism)

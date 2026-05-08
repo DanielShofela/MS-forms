@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { ShoppingCart, Star, Clock, Truck, ShieldCheck } from 'lucide-react';
+import { ShoppingCart, Star, Clock, Truck, ShieldCheck, Package } from 'lucide-react';
 import { Product } from '../types';
 import { formatPrice } from '../lib/utils';
 
@@ -71,6 +71,24 @@ export default function ProductLanding({ product, onOrderClick }: ProductLanding
               <span className="font-medium text-sm">{point}</span>
             </motion.div>
           ))}
+        </div>
+
+        {/* Tracking info for conversion */}
+        <div className="mt-4 p-5 bg-dark text-white rounded-3xl flex flex-col gap-4 relative overflow-hidden">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/5 rounded-full blur-2xl" />
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-brand/20 rounded-lg text-brand">
+              <Package size={20} />
+            </div>
+            <h4 className="font-bold">Suivi de commande</h4>
+          </div>
+          <p className="text-xs text-gray-400">
+            Une fois votre commande passée, vous pourrez suivre son état en temps réel directement ici.
+          </p>
+          <div className="flex items-center gap-2 text-[10px] text-gray-500 uppercase tracking-widest font-bold border-t border-white/10 pt-3">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            Service actif 24h/24
+          </div>
         </div>
 
         {/* Floating CTA */}

@@ -6,6 +6,7 @@
       "type": "object",
       "properties": {
         "customerName": { "type": "string", "description": "Full name of the customer" },
+        "email": { "type": "string", "description": "Email for order tracking" },
         "phone": { "type": "string", "description": "WhatsApp phone number" },
         "city": { "type": "string", "description": "City or commune for delivery" },
         "address": { "type": "string", "description": "Precise delivery address" },
@@ -14,11 +15,11 @@
         "quantity": { "type": "integer", "description": "Quantity ordered" },
         "deliveryMode": { "type": "string", "description": "Chosen delivery method" },
         "totalPrice": { "type": "number", "description": "Final total price" },
-        "status": { "type": "string", "enum": ["new", "confirmed", "shipping", "delivered"], "description": "Current status of the order" },
+        "status": { "type": "string", "enum": ["pending", "processing", "delivered", "cancelled"], "description": "Current status of the order" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["customerName", "phone", "city", "address", "productId", "quantity", "status", "createdAt"]
+      "required": ["customerName", "email", "phone", "city", "address", "productId", "quantity", "status", "createdAt"]
     },
     "Product": {
       "title": "Product",
@@ -31,9 +32,10 @@
         "oldPrice": { "type": "number" },
         "imageUrl": { "type": "string" },
         "stock": { "type": "integer" },
-        "isPromo": { "type": "boolean" }
+        "isPromo": { "type": "boolean" },
+        "marketingPoints": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["name", "price", "imageUrl"]
+      "required": ["name", "price", "imageUrl", "stock"]
     }
   },
   "firestore": {

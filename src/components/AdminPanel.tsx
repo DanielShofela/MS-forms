@@ -105,18 +105,18 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
 
   const stats = {
     total: orders.length,
-    new: orders.filter(o => o.status === 'new').length,
-    confirmed: orders.filter(o => o.status === 'confirmed').length,
-    shipping: orders.filter(o => o.status === 'shipping').length,
+    pending: orders.filter(o => o.status === 'pending').length,
+    processing: orders.filter(o => o.status === 'processing').length,
+    delivered: orders.filter(o => o.status === 'delivered').length,
     revenue: orders.reduce((acc, o) => acc + (o.status === 'delivered' ? o.totalPrice : 0), 0)
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'new': return 'bg-yellow-100 text-yellow-700';
-      case 'confirmed': return 'bg-blue-100 text-blue-700';
-      case 'shipping': return 'bg-purple-100 text-purple-700';
+      case 'pending': return 'bg-yellow-100 text-yellow-700';
+      case 'processing': return 'bg-blue-100 text-blue-700';
       case 'delivered': return 'bg-green-100 text-green-700';
+      case 'cancelled': return 'bg-red-100 text-red-700';
       default: return 'bg-gray-100 text-gray-700';
     }
   };
@@ -173,10 +173,10 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
           {/* Stats Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 px-4 mb-4">
             {[
-              { label: 'Nouvelles', value: stats.new, icon: Clock, color: 'text-yellow-500' },
-              { label: 'Confirmées', value: stats.confirmed, icon: CheckCircle, color: 'text-blue-500' },
-              { label: 'En Livraison', value: stats.shipping, icon: Truck, color: 'text-purple-500' },
-              { label: 'Chiffre (L)', value: formatPrice(stats.revenue), icon: BarChart3, color: 'text-green-500' },
+              { label: 'Attente', value: stats.pending, icon: Clock, color: 'text-yellow-500' },
+              { label: 'En Cours', value: stats.processing, icon: Truck, color: 'text-blue-500' },
+              { label: 'Livré', value: stats.delivered, icon: CheckCircle, color: 'text-green-500' },
+              { label: 'Chiffre (L)', value: formatPrice(stats.revenue), icon: BarChart3, color: 'text-green-600' },
             ].map((stat, i) => (
               <div key={i} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
                 <div className="flex justify-between items-start mb-2">
@@ -204,7 +204,7 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
               />
             </div>
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {['all', 'new', 'confirmed', 'shipping', 'delivered'].map(status => (
+              {['all', 'pending', 'processing', 'delivered', 'cancelled'].map(status => (
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status)}
@@ -213,7 +213,10 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
                     filterStatus === status ? "bg-dark text-white border-dark" : "bg-white text-gray-500 border-gray-200"
                   )}
                 >
-                  {status === 'all' ? 'Toutes' : status.charAt(0).toUpperCase() + status.slice(1)}
+                  {status === 'all' ? 'Toutes' : 
+                   status === 'pending' ? 'Attente' :
+                   status === 'processing' ? 'En cours' :
+                   status === 'delivered' ? 'Livré' : 'Annulé'}
                 </button>
               ))}
             </div>
@@ -234,9 +237,9 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
                     <span className="font-bold text-lg text-dark">{order.customerName}</span>
                     <div className="flex items-center gap-2">
                       <span className={cn("text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider", getStatusColor(order.status))}>
-                        {order.status === 'new' ? 'Nouveau' : 
-                         order.status === 'confirmed' ? 'Confirmé' :
-                         order.status === 'shipping' ? 'En route' : 'Livré'}
+                        {order.status === 'pending' ? 'Attente' : 
+                         order.status === 'processing' ? 'En cours' :
+                         order.status === 'delivered' ? 'Livré' : 'Annulé'}
                       </span>
                       <span className="text-[10px] text-gray-400 font-mono">{order.id?.slice(-6).toUpperCase()}</span>
                     </div>
@@ -280,10 +283,10 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
                       onChange={(e) => updateStatus(order.id!, e.target.value)}
                       className="w-full bg-dark text-white rounded-xl py-3 px-4 text-xs font-bold outline-none appearance-none cursor-pointer text-center"
                     >
-                      <option value="new">🆕 Nouveau</option>
-                      <option value="confirmed">✅ Confirmé</option>
-                      <option value="shipping">🚚 En livraison</option>
+                      <option value="pending">⏳ Attente</option>
+                      <option value="processing">🚚 En cours</option>
                       <option value="delivered">🏁 Livré</option>
+                      <option value="cancelled">❌ Annulé</option>
                     </select>
                   </div>
                   <button 

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Send, MapPin, Phone, User, Package, Truck, CheckCircle2 } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { Mail, ArrowLeft, Send, MapPin, Phone, User, Package, Truck, CheckCircle2 } from 'lucide-react';
+import { auth, db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Product, Order } from '../types';
 import { formatPrice, cn } from '../lib/utils';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
@@ -18,11 +19,21 @@ export default function OrderForm({ product, onBack, onSuccess }: OrderFormProps
   const [quantity, setQuantity] = useState(1);
   const [formData, setFormData] = useState({
     customerName: '',
+    email: auth.currentUser?.email || '',
     phone: '',
     city: '',
     address: '',
     deliveryMode: 'standard'
   });
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        setFormData(prev => ({ ...prev, email: u.email || prev.email }));
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const isFreeDelivery = product.marketingPoints.some(p => p.toLowerCase().includes('livraison gratuite'));
 
@@ -40,6 +51,7 @@ export default function OrderForm({ product, onBack, onSuccess }: OrderFormProps
     try {
       const orderData: Order = {
         customerName: formData.customerName,
+        email: formData.email,
         phone: formData.phone,
         city: formData.city,
         address: formData.address,
@@ -48,7 +60,7 @@ export default function OrderForm({ product, onBack, onSuccess }: OrderFormProps
         quantity,
         deliveryMode: formData.deliveryMode,
         totalPrice,
-        status: 'new',
+        status: 'pending',
         createdAt: serverTimestamp(),
       };
 
@@ -108,6 +120,18 @@ export default function OrderForm({ product, onBack, onSuccess }: OrderFormProps
               className="input-field"
               value={formData.customerName}
               onChange={e => setFormData({ ...formData, customerName: e.target.value })}
+            />
+          </div>
+
+          <div className="input-with-icon">
+            <Mail className="icon" size={20} />
+            <input 
+              required
+              type="email"
+              placeholder="Email pour le suivi"
+              className="input-field"
+              value={formData.email}
+              onChange={e => setFormData({ ...formData, email: e.target.value })}
             />
           </div>
 

@@ -9,7 +9,7 @@ export interface Order {
   quantity: number;
   deliveryMode: string;
   totalPrice: number;
-  status: 'new' | 'confirmed' | 'shipping' | 'delivered';
+  status: 'pending' | 'processing' | 'delivered' | 'cancelled';
   createdAt: any;
   updatedAt?: any;
 }

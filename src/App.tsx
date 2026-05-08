@@ -3,8 +3,9 @@ import ProductLanding from './components/ProductLanding';
 import OrderForm from './components/OrderForm';
 import SuccessView from './components/SuccessView';
 import AdminPanel from './components/AdminPanel';
+import CustomerOrders from './components/CustomerOrders';
 import { Product } from './types';
-import { ShieldCheck, LogIn, X, LogOut } from 'lucide-react';
+import { ShieldCheck, LogIn, X, LogOut, ShoppingBag, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db } from './lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -26,14 +27,14 @@ const DUMMY_PRODUCT: Product = {
   ]
 };
 
-type ViewState = 'landing' | 'form' | 'success' | 'admin';
+type ViewState = 'landing' | 'form' | 'success' | 'admin' | 'customerOrders';
 
 export default function App() {
   const [view, setView] = useState<ViewState>('landing');
   const [lastOrderId, setLastOrderId] = useState<string>('');
   const [user, setUser] = useState<any>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
@@ -43,8 +44,12 @@ export default function App() {
       setUser(u);
       setLoadingAuth(false);
       
-      if (u && window.location.hash === '#admin') {
-        setView('admin');
+      if (u) {
+        if (window.location.hash === '#admin' && u.email === 'digitalsoutien@gmail.com') {
+          setView('admin');
+        } else if (window.location.hash === '#orders') {
+          setView('customerOrders');
+        }
       }
     });
 
@@ -62,14 +67,20 @@ export default function App() {
     };
   }, []);
 
-  const handleAdminLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      setShowAdminLogin(false);
-      setView('admin');
-      window.location.hash = 'admin';
+      const result = await signInWithPopup(auth, provider);
+      setShowLogin(false);
+      
+      if (result.user.email === 'digitalsoutien@gmail.com') {
+        setView('admin');
+        window.location.hash = 'admin';
+      } else {
+        setView('customerOrders');
+        window.location.hash = 'orders';
+      }
     } catch (error) {
       console.error("Login failed", error);
       alert("Erreur de connexion");
@@ -103,17 +114,27 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <div className="bg-dark text-white p-4 flex justify-between items-center">
+            <div className="bg-dark text-white p-4 flex justify-between items-center h-16">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center font-bold">M</div>
                 <span className="font-display font-bold tracking-tight uppercase">MAISON SMART +</span>
               </div>
-              <button 
-                onClick={() => isAdminLoggedIn ? setView('admin') : setShowAdminLogin(true)}
-                className="p-2 text-gray-500"
-              >
-                <ShieldCheck size={20} />
-              </button>
+              <div className="flex items-center gap-1">
+                {user && (
+                  <button 
+                    onClick={() => isAdminLoggedIn ? setView('admin') : setView('customerOrders')}
+                    className="p-2 text-brand"
+                  >
+                    {isAdminLoggedIn ? <ShieldCheck size={22} /> : <ShoppingBag size={22} />}
+                  </button>
+                )}
+                <button 
+                  onClick={() => user ? logout() : setShowLogin(true)}
+                  className="p-2 text-gray-500"
+                >
+                  {user ? <LogOut size={20} /> : <User size={22} />}
+                </button>
+              </div>
             </div>
             
             {loadingProducts ? (
@@ -164,11 +185,27 @@ export default function App() {
             <AdminPanel onLogout={logout} />
           </motion.div>
         )}
+
+        {view === 'customerOrders' && user && (
+          <motion.div 
+            key="customer-orders"
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          >
+            <CustomerOrders 
+              userEmail={user.email} 
+              onBack={() => setView('landing')} 
+              onLogout={logout} 
+            />
+          </motion.div>
+        )}
       </AnimatePresence>
 
-      {/* Admin Login Modal */}
+      {/* Login Modal */}
       <AnimatePresence>
-        {showAdminLogin && (
+        {showLogin && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
             <motion.div 
               initial={{ y: 20, opacity: 0 }}
@@ -176,21 +213,28 @@ export default function App() {
               exit={{ y: 20, opacity: 0 }}
               className="bg-white rounded-3xl p-8 w-full max-w-sm flex flex-col gap-6 relative"
             >
-              <button onClick={() => setShowAdminLogin(false)} className="absolute top-4 right-4 p-2 text-gray-400">
+              <button onClick={() => setShowLogin(false)} className="absolute top-4 right-4 p-2 text-gray-400">
                 <X size={20} />
               </button>
               <div className="flex flex-col items-center gap-2 text-center">
-                <div className="w-16 h-16 rounded-2xl bg-dark text-white flex items-center justify-center mb-2">
-                  <ShieldCheck size={32} />
+                <div className="w-16 h-16 rounded-2xl bg-brand/10 text-brand flex items-center justify-center mb-2">
+                  <User size={32} />
                 </div>
-                <h3 className="text-2xl">Accès Admin</h3>
-                <p className="text-gray-500 text-sm">Entrez votre code pour accéder au dashboard</p>
+                <h3 className="text-2xl">Connectez-vous</h3>
+                <p className="text-gray-500 text-sm">Suivez vos commandes et gérez vos informations personnelles.</p>
               </div>
-              <form onSubmit={handleAdminLogin} className="flex flex-col gap-4">
+              <form onSubmit={handleLogin} className="flex flex-col gap-4">
                 <button className="cta-button w-full bg-dark">
                   <LogIn size={20} />
                   Se connecter avec Google
                 </button>
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-start gap-3">
+                  <ShoppingBag size={18} className="text-brand shrink-0 mt-1" />
+                  <p className="text-[10px] text-gray-500">
+                    <span className="font-bold text-dark block mb-1">NOTE POUR LE SUIVI</span>
+                    Utilisez le <span className="font-bold">même email Google</span> que celui renseigné lors de votre commande pour voir vos colis.
+                  </p>
+                </div>
                 <p className="text-[10px] text-center text-gray-400 uppercase tracking-widest mt-2">
                   Protégé par MAISON SMART + Security
                 </p>
