@@ -24,9 +24,11 @@ export default function OrderForm({ product, onBack, onSuccess }: OrderFormProps
     deliveryMode: 'standard'
   });
 
+  const isFreeDelivery = product.marketingPoints.some(p => p.toLowerCase().includes('livraison gratuite'));
+
   const deliveryFees = {
-    standard: 2000,
-    express: 5000
+    standard: isFreeDelivery ? 0 : 2000,
+    express: isFreeDelivery ? 900 : 5000
   };
 
   const totalPrice = (product.price * quantity) + (deliveryFees[formData.deliveryMode as keyof typeof deliveryFees] || 0);
@@ -159,7 +161,8 @@ export default function OrderForm({ product, onBack, onSuccess }: OrderFormProps
                 <Truck size={24} className={formData.deliveryMode === 'standard' ? "text-brand" : "text-gray-400"} />
                 <div className="flex flex-col items-center">
                   <span className="font-bold text-sm">Standard</span>
-                  <span className="text-xs text-gray-500">2-3 jours</span>
+                  <span className="text-xs text-brand font-bold">{deliveryFees.standard === 0 ? "Gratuit" : formatPrice(deliveryFees.standard)}</span>
+                  <span className="text-[10px] text-gray-500">2-3 jours</span>
                 </div>
               </button>
               <button 
@@ -173,7 +176,8 @@ export default function OrderForm({ product, onBack, onSuccess }: OrderFormProps
                 <Send size={24} className={formData.deliveryMode === 'express' ? "text-brand" : "text-gray-400"} />
                 <div className="flex flex-col items-center">
                   <span className="font-bold text-sm">Express</span>
-                  <span className="text-xs text-gray-500">24h max</span>
+                  <span className="text-xs text-brand font-bold">{formatPrice(deliveryFees.express)}</span>
+                  <span className="text-[10px] text-gray-500">24h max</span>
                 </div>
               </button>
             </div>
