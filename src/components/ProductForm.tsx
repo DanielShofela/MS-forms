@@ -25,7 +25,8 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
     marketingPoint3: 'Installation incluse'
   });
   const [imageUrl, setImageUrl] = useState('');
-  const [dragActive, setDragActive] = useState(false);
+  const [additionalImages, setAdditionalImages] = useState<string[]>([]);
+  const [dragActive, setDragActive] = useState<number | null>(null);
 
   useEffect(() => {
     if (product) {
@@ -41,45 +42,114 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
         marketingPoint3: product.marketingPoints[2] || ''
       });
       setImageUrl(product.imageUrl);
+      setAdditionalImages(product.images || []);
     }
   }, [product]);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
+  const compressImage = (base64Str: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // Define target dimensions (HD is enough for products)
+        const MAX_WIDTH = 1200;
+        const MAX_HEIGHT = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Add white background for transparent PNGs converted to JPEGs
+          ctx.fillStyle = "white";
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+        }
+        
+        // JPEG compression 0.6 provides a great reduction in size (around 100-150kb) while looking perfect on mobile
+        resolve(canvas.toDataURL('image/jpeg', 0.6));
+      };
+    });
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent, index: number) => {
     let file: File | undefined;
     
-    if ('files' in e.target && e.target.files) {
-      file = e.target.files[0];
-    } else if ('dataTransfer' in e) {
-      file = e.dataTransfer.files[0];
+    if ('files' in (e.target as any) && (e.target as any).files) {
+      file = (e.target as any).files[0];
+    } else if ('dataTransfer' in (e as any) && (e as any).dataTransfer) {
+      file = (e as any).dataTransfer.files[0];
     }
 
     if (!file) return;
 
-    // Check size (max 500kb for Base64 in Firestore documents comfortably)
-    if (file.size > 800000) {
-      alert("L'image est trop lourde. Veuillez choisir une image de moins de 800 Ko pour optimiser la vitesse.");
+    if (file.size > 1200000) {
+      alert("L'image est vraiment trop lourde (" + Math.round(file.size/1024) + " Ko). Veuillez choisir une image de moins de 1.2 Mo (1200 Ko).");
       return;
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setImageUrl(reader.result as string);
+    reader.onloadend = async () => {
+      const result = reader.result as string;
+      // Automatically compress the image after reading it
+      const compressed = await compressImage(result);
+      
+      if (index === 0) {
+        setImageUrl(compressed);
+      } else {
+        const newImages = [...additionalImages];
+        newImages[index - 1] = compressed;
+        setAdditionalImages(newImages);
+      }
     };
     reader.readAsDataURL(file);
   };
 
+  const setImageUrlAtIndex = (val: string, index: number) => {
+    if (index === 0) {
+      setImageUrl(val);
+    } else {
+      const newImages = [...additionalImages];
+      newImages[index - 1] = val;
+      // Filter out empty strings if they are at the end, but keep the slots for UI
+      setAdditionalImages(newImages);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    if (index === 0) {
+      setImageUrl('');
+    } else {
+      const newImages = [...additionalImages];
+      newImages.splice(index - 1, 1);
+      setAdditionalImages(newImages);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Tentative de sauvegarde...", { hasImage: !!imageUrl, formData });
     
     if (!imageUrl || imageUrl.trim() === '') {
-      console.error("Erreur validation: Image manquante");
-      alert("Veuillez importer une image produit. Vous pouvez soit glisser un fichier, soit coller un lien URL.");
+      alert("La première image est obligatoire.");
       return;
     }
 
     if (!formData.name || !formData.price) {
-      alert("Veuillez remplir au moins le nom et le prix du produit.");
+      alert("Nom et prix sont obligatoires.");
       return;
     }
 
@@ -94,6 +164,7 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
         stock: parseInt(formData.stock) || 10,
         isPromo: formData.isPromo,
         imageUrl: imageUrl,
+        images: additionalImages.filter(img => img && img.trim() !== ''),
         marketingPoints: [
           formData.marketingPoint1,
           formData.marketingPoint2,
@@ -101,8 +172,6 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
         ].filter(p => p && p.trim() !== ''),
         updatedAt: serverTimestamp()
       };
-
-      console.log("Envoi des données à Firestore...", productData);
 
       if (product?.id) {
         await updateDoc(doc(db, 'products', product.id), productData);
@@ -112,10 +181,8 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
           createdAt: serverTimestamp()
         });
       }
-      console.log("Sauvegarde réussie !");
       onClose();
     } catch (error) {
-      console.error("Erreur lors de la sauvegarde Firestore:", error);
       handleFirestoreError(error, OperationType.WRITE, 'products');
     } finally {
       setLoading(false);
@@ -142,77 +209,98 @@ export default function ProductForm({ product, onClose }: ProductFormProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-6 flex flex-col gap-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-          {/* Section Image */}
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="p-2 bg-brand/10 rounded-lg text-brand">
-                <ImageIcon size={18} />
+          {/* Section Images */}
+          <div className="flex flex-col gap-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-brand/10 rounded-lg text-brand">
+                  <ImageIcon size={18} />
+                </div>
+                <h3 className="text-sm font-bold text-dark">Images du produit (Max 4)</h3>
               </div>
-              <h3 className="text-sm font-bold text-dark">Image du produit</h3>
+              <span className="text-[10px] text-gray-400 font-medium bg-gray-100 px-2 py-0.5 rounded-full">
+                {1 + additionalImages.filter(img => img && img.trim() !== '').length} / 4
+              </span>
             </div>
 
-            {/* Preview and Upload */}
-            <div 
-              onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-              onDragLeave={() => setDragActive(false)}
-              onDrop={(e) => { e.preventDefault(); setDragActive(false); handleImageUpload(e); }}
-              className={`relative aspect-video rounded-3xl border-2 border-dashed transition-all overflow-hidden flex flex-col items-center justify-center gap-3 ${
-                dragActive ? 'border-brand bg-brand/5' : 'border-gray-200 bg-gray-50'
-              }`}
-            >
-              {imageUrl ? (
-                <>
-                  <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                    <button 
-                      type="button" 
-                      onClick={() => setImageUrl('')}
-                      className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white hover:bg-white/40 transition-colors"
-                    >
-                      <X size={24} />
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand">
-                    <Upload size={28} />
-                  </div>
-                  <div className="text-center px-4">
-                    <p className="text-sm font-bold text-dark">Cliquez ou glissez l'image</p>
-                    <p className="text-xs text-gray-500 mt-1">L'image sera stockée sur nos serveurs</p>
-                  </div>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleImageUpload}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                  />
-                </>
-              )}
-            </div>
-
-            {/* URL Input as alternative */}
-            <div className="input-with-icon">
-              <span className="icon"><ImageIcon size={18} /></span>
+            {/* Main Image Slot */}
+            <div className="flex flex-col gap-3">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Image Principale (Obligatoire)</span>
+              <div 
+                onDragOver={(e) => { e.preventDefault(); setDragActive(0); }}
+                onDragLeave={() => setDragActive(null)}
+                onDrop={(e) => { e.preventDefault(); setDragActive(null); handleImageUpload(e, 0); }}
+                className={`relative aspect-video rounded-3xl border-2 border-dashed transition-all overflow-hidden flex flex-col items-center justify-center gap-3 ${
+                  dragActive === 0 ? 'border-brand bg-brand/5' : 'border-gray-200 bg-gray-50'
+                }`}
+              >
+                {imageUrl ? (
+                  <>
+                    <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button type="button" onClick={() => removeImage(0)} className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white">
+                        <X size={20} />
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={24} className="text-brand" />
+                    <p className="text-[10px] font-bold text-dark">Glissez ou cliquez</p>
+                    <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 0)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                  </>
+                )}
+              </div>
               <input 
                 type="text" 
-                placeholder="Ou collez l'URL de l'image ici..." 
-                className={`input-field text-xs ${imageUrl.startsWith('data:') ? 'bg-brand/5 border-brand/20' : ''}`} 
-                value={imageUrl.startsWith('data:') ? '' : imageUrl} 
-                onChange={e => handleUrlChange(e.target.value)} 
+                placeholder="Lien URL de l'image principale..." 
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] outline-none"
+                value={imageUrl.startsWith('data:') ? '' : imageUrl}
+                onChange={(e) => setImageUrlAtIndex(e.target.value, 0)}
               />
-              {imageUrl.startsWith('data:') && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-brand uppercase">Fichier</span>
-                </div>
-              )}
             </div>
-            <p className="text-[10px] text-gray-400 px-1">
-              {imageUrl.startsWith('data:') 
-                ? "L'image importée par fichier sera utilisée. Pour utiliser un lien, videz d'abord l'image."
-                : "Astuce: Copiez l'adresse d'une image sur le web et collez-la ici."}
-            </p>
+
+            {/* Additional Images Grid */}
+            <div className="grid grid-cols-3 gap-3">
+              {[1, 2, 3].map((idx) => {
+                const currentImg = additionalImages[idx - 1];
+                return (
+                  <div key={idx} className="flex flex-col gap-2">
+                    <div 
+                      onDragOver={(e) => { e.preventDefault(); setDragActive(idx); }}
+                      onDragLeave={() => setDragActive(null)}
+                      onDrop={(e) => { e.preventDefault(); setDragActive(null); handleImageUpload(e, idx); }}
+                      className={`relative aspect-square rounded-2xl border-2 border-dashed transition-all overflow-hidden flex flex-col items-center justify-center gap-1 ${
+                        dragActive === idx ? 'border-brand bg-brand/5' : 'border-gray-100 bg-gray-50'
+                      }`}
+                    >
+                      {currentImg ? (
+                        <>
+                          <img src={currentImg} alt={`Extra ${idx}`} className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <button type="button" onClick={() => removeImage(idx)} className="bg-white/20 backdrop-blur-sm p-1.5 rounded-full text-white">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={16} className="text-gray-300" />
+                          <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, idx)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                        </>
+                      )}
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="URL..." 
+                      className="bg-gray-50 border border-gray-100 rounded-lg px-2 py-1 text-[8px] outline-none"
+                      value={currentImg && currentImg.startsWith('data:') ? '' : (currentImg || '')}
+                      onChange={(e) => setImageUrlAtIndex(e.target.value, idx)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4">

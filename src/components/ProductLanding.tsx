@@ -10,24 +10,53 @@ interface ProductLandingProps {
 }
 
 export default function ProductLanding({ product, onOrderClick }: ProductLandingProps) {
+  const allImages = [product.imageUrl, ...(product.images || [])].filter(img => img && img.trim() !== '');
+  const [selectedImage, setSelectedImage] = React.useState(allImages[0]);
+
+  React.useEffect(() => {
+    setSelectedImage(allImages[0]);
+  }, [product.id]);
+
   return (
     <div className="flex flex-col gap-6 pb-24">
       {/* Product Image Section */}
-      <div className="relative w-full aspect-square bg-gray-200 overflow-hidden">
-        <img 
-          src={product.imageUrl} 
-          alt={product.name}
-          className="w-full h-full object-cover"
-        />
-        {product.isPromo && (
-          <div className="absolute top-4 left-4 bg-brand text-white px-3 py-1 rounded-full text-sm font-bold shadow-lg">
-            PROMO -{Math.round((1 - product.price/product.oldPrice!) * 100)}%
+      <div className="flex flex-col gap-3">
+        <div className="relative w-full aspect-square bg-gray-200 overflow-hidden">
+          <motion.img 
+            key={selectedImage}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            src={selectedImage} 
+            alt={product.name}
+            className="w-full h-full object-cover"
+          />
+          {product.isPromo && (
+            <div className="absolute top-4 left-4 bg-brand text-white px-3 py-1 rounded-full text-sm font-bold shadow-lg">
+              PROMO -{product.oldPrice ? Math.round((1 - product.price/product.oldPrice) * 100) : 0}%
+            </div>
+          )}
+          <div className="absolute bottom-4 right-4 bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-bold flex items-center gap-1 shadow-lg animate-pulse">
+            <Clock size={16} />
+            Stock limité !
+          </div>
+        </div>
+
+        {/* Thumbnails */}
+        {allImages.length > 1 && (
+          <div className="px-5 flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {allImages.map((img, i) => (
+              <button 
+                key={i}
+                onClick={() => setSelectedImage(img)}
+                className={`w-16 h-16 rounded-xl overflow-hidden border-2 transition-all shrink-0 ${
+                  selectedImage === img ? 'border-brand scale-105 shadow-md' : 'border-gray-100 opacity-60'
+                }`}
+              >
+                <img src={img} className="w-full h-full object-cover" />
+              </button>
+            ))}
           </div>
         )}
-        <div className="absolute bottom-4 right-4 bg-red-600 text-white px-3 py-1 rounded-lg text-sm font-bold flex items-center gap-1 shadow-lg animate-pulse">
-          <Clock size={16} />
-          Stock limité !
-        </div>
       </div>
 
       {/* Product Info */}

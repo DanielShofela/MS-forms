@@ -18,6 +18,7 @@ const DUMMY_PRODUCT: Product = {
   price: 245000,
   oldPrice: 320000,
   imageUrl: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=2070&auto=format&fit=crop",
+  images: [],
   stock: 12,
   isPromo: true,
   marketingPoints: [
@@ -67,10 +68,16 @@ export default function App() {
     };
   }, []);
 
+  const [authError, setAuthError] = useState<string | null>(null);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
     try {
       const provider = new GoogleAuthProvider();
+      // Force account selection to avoid some silent failures
+      provider.setCustomParameters({ prompt: 'select_account' });
+      
       const result = await signInWithPopup(auth, provider);
       setShowLogin(false);
       
@@ -81,9 +88,17 @@ export default function App() {
         setView('customerOrders');
         window.location.hash = 'orders';
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed", error);
-      alert("Erreur de connexion");
+      if (error.code === 'auth/network-request-failed') {
+        setAuthError("Erreur réseau. Veuillez vérifier votre connexion ou assurez-vous que ce domaine est autorisé dans votre console Firebase.");
+      } else if (error.code === 'auth/popup-blocked') {
+        setAuthError("Le popup de connexion a été bloqué par votre navigateur. Veuillez l'autoriser.");
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        setAuthError("La fenêtre de connexion a été fermée avant la fin du processus.");
+      } else {
+        setAuthError("Une erreur est survenue lors de la connexion.");
+      }
     }
   };
 
@@ -224,6 +239,11 @@ export default function App() {
                 <p className="text-gray-500 text-sm">Suivez vos commandes et gérez vos informations personnelles.</p>
               </div>
               <form onSubmit={handleLogin} className="flex flex-col gap-4">
+                {authError && (
+                  <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-[10px] text-red-600 font-medium">
+                    {authError}
+                  </div>
+                )}
                 <button className="cta-button w-full bg-dark">
                   <LogIn size={20} />
                   Se connecter avec Google

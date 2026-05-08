@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { Order, Product } from '../types';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { Order, Product, Admin } from '../types';
 import { formatPrice } from '../lib/utils';
+import { auth } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import ProductForm from './ProductForm';
 import { 
@@ -19,18 +20,24 @@ import {
   MapPin,
   RefreshCcw,
   LogOut,
-  Package
+  Package,
+  Trash2,
+  ShieldCheck,
+  UserPlus
 } from 'lucide-react';
 
 export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
-  const [activeTab, setActiveTab] = useState<'orders' | 'products'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'admins'>('orders');
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [admins, setAdmins] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [showProductForm, setShowProductForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [isAddingAdmin, setIsAddingAdmin] = useState(false);
 
   useEffect(() => {
     const qOrders = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
@@ -57,9 +64,22 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
       handleFirestoreError(error, OperationType.LIST, 'products');
     });
 
+    const qAdmins = query(collection(db, 'admins'), orderBy('createdAt', 'desc'));
+    const unsubscribeAdmins = onSnapshot(qAdmins, (snapshot) => {
+      const adminsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setAdmins(adminsData);
+      if (activeTab === 'admins') setLoading(false);
+    }, (error) => {
+      console.warn("User might not have permissions to list admins yet", error);
+    });
+
     return () => {
       unsubscribeOrders();
       unsubscribeProducts();
+      unsubscribeAdmins();
     };
   }, [activeTab]);
 
@@ -67,28 +87,78 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
     try {
       await updateDoc(doc(db, 'orders', orderId), { 
         status,
-        updatedAt: new Date()
+        updatedAt: serverTimestamp()
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
     }
   };
 
+  const [confirmDeleteOrderId, setConfirmDeleteOrderId] = useState<string | null>(null);
+
   const deleteOrder = async (orderId: string) => {
-    if(!confirm("Supprimer cette commande ?")) return;
+    if(!orderId) return;
     try {
       await deleteDoc(doc(db, 'orders', orderId));
-    } catch (error) {
+      setConfirmDeleteOrderId(null);
+    } catch (error: any) {
+      console.error("Error deleting order:", error);
       handleFirestoreError(error, OperationType.DELETE, `orders/${orderId}`);
     }
   };
 
-  const deleteProduct = async (productId: string) => {
-    if(!confirm("Supprimer ce produit ?")) return;
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const deleteProduct = async (productId: string | undefined) => {
+    console.log("Attempting to delete product:", productId);
+    if(!productId) {
+      alert("Erreur: ID du produit manquant.");
+      return;
+    }
+
     try {
+      console.log("Calling deleteDoc for product:", productId);
       await deleteDoc(doc(db, 'products', productId));
-    } catch (error) {
+      console.log("Product deleted successfully");
+      setConfirmDeleteId(null);
+    } catch (error: any) {
+      console.error("Error deleting product:", error);
       handleFirestoreError(error, OperationType.DELETE, `products/${productId}`);
+    }
+  };
+
+  const addAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminEmail.trim()) return;
+    setIsAddingAdmin(true);
+    try {
+      const email = newAdminEmail.trim().toLowerCase();
+      await setDoc(doc(db, 'admins', email), {
+        email,
+        addedBy: auth.currentUser?.email,
+        createdAt: serverTimestamp()
+      });
+      setNewAdminEmail('');
+      alert("Administrateur ajouté avec succès.");
+    } catch (error) {
+      console.error("Error adding admin:", error);
+      alert("Erreur: Vous n'avez probablement pas les permissions pour gérer les administrateurs.");
+    } finally {
+      setIsAddingAdmin(false);
+    }
+  };
+
+  const removeAdmin = async (email: string) => {
+    if (email === "digitalsoutien@gmail.com") {
+      alert("Impossible de supprimer l'administrateur principal.");
+      return;
+    }
+    if (!confirm(`Supprimer ${email} des administrateurs ?`)) return;
+    try {
+      await deleteDoc(doc(db, 'admins', email.toLowerCase()));
+    } catch (error) {
+      console.error("Error removing admin:", error);
+      alert("Erreur lors de la suppression.");
     }
   };
 
@@ -116,7 +186,9 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
       case 'pending': return 'bg-yellow-100 text-yellow-700';
       case 'processing': return 'bg-blue-100 text-blue-700';
       case 'delivered': return 'bg-green-100 text-green-700';
-      case 'cancelled': return 'bg-red-100 text-red-700';
+      case 'cancelled': 
+      case 'cancelled_by_customer': return 'bg-red-100 text-red-700';
+      case 'deleted_by_customer': return 'bg-gray-100 text-gray-500';
       default: return 'bg-gray-100 text-gray-700';
     }
   };
@@ -151,20 +223,29 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
         <button 
           onClick={() => setActiveTab('orders')}
           className={cn(
-            "flex-1 py-3 rounded-xl font-bold transition-all",
+            "flex-1 py-3 rounded-xl font-bold transition-all text-sm",
             activeTab === 'orders' ? "bg-dark text-white shadow-lg" : "bg-white text-gray-500 border border-gray-100"
           )}
         >
-          Commandes ({orders.length})
+          Orders ({orders.length})
         </button>
         <button 
           onClick={() => setActiveTab('products')}
           className={cn(
-            "flex-1 py-3 rounded-xl font-bold transition-all",
+            "flex-1 py-3 rounded-xl font-bold transition-all text-sm",
             activeTab === 'products' ? "bg-dark text-white shadow-lg" : "bg-white text-gray-500 border border-gray-100"
           )}
         >
-          Boutique ({products.length})
+          Stock ({products.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('admins')}
+          className={cn(
+            "flex-1 py-3 rounded-xl font-bold transition-all text-sm",
+            activeTab === 'admins' ? "bg-dark text-white shadow-lg" : "bg-white text-gray-500 border border-gray-100"
+          )}
+        >
+          Admins ({admins.length + 1})
         </button>
       </div>
 
@@ -204,7 +285,7 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
               />
             </div>
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {['all', 'pending', 'processing', 'delivered', 'cancelled'].map(status => (
+              {['all', 'pending', 'processing', 'delivered', 'cancelled', 'cancelled_by_customer', 'deleted_by_customer'].map(status => (
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status)}
@@ -216,7 +297,9 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
                   {status === 'all' ? 'Toutes' : 
                    status === 'pending' ? 'Attente' :
                    status === 'processing' ? 'En cours' :
-                   status === 'delivered' ? 'Livré' : 'Annulé'}
+                   status === 'delivered' ? 'Livré' :
+                   status === 'cancelled' ? 'Annulé (Admin)' :
+                   status === 'cancelled_by_customer' ? 'Annulé (Client)' : 'Masqué (Client)'}
                 </button>
               ))}
             </div>
@@ -233,18 +316,29 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
             ) : filteredOrders.map(order => (
               <div key={order.id} className="admin-card p-5 flex flex-col gap-4">
                 <div className="flex justify-between items-start">
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-lg text-dark">{order.customerName}</span>
-                    <div className="flex items-center gap-2">
-                      <span className={cn("text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider", getStatusColor(order.status))}>
+                  <div className="flex items-center gap-4">
+                    {order.productImage ? (
+                      <img src={order.productImage} className="w-16 h-16 rounded-xl object-cover shrink-0 bg-gray-100 shadow-sm" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+                        <Package size={24} className="text-gray-300" />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-1">
+                      <span className="font-bold text-lg text-dark">{order.customerName}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider", getStatusColor(order.status))}>
                         {order.status === 'pending' ? 'Attente' : 
                          order.status === 'processing' ? 'En cours' :
-                         order.status === 'delivered' ? 'Livré' : 'Annulé'}
+                         order.status === 'delivered' ? 'Livré' :
+                         order.status === 'cancelled_by_customer' ? 'Annulé par Client' :
+                         order.status === 'deleted_by_customer' ? 'Supprimé par Client' : 'Annulé'}
                       </span>
                       <span className="text-[10px] text-gray-400 font-mono">{order.id?.slice(-6).toUpperCase()}</span>
                     </div>
                   </div>
-                  <div className="text-right">
+                </div>
+                <div className="text-right">
                     <div className="text-sm font-bold text-brand">{formatPrice(order.totalPrice)}</div>
                     <span className="text-[10px] text-gray-400">{order.deliveryMode === 'express' ? '⚡ Express' : '🚚 Standard'}</span>
                   </div>
@@ -287,25 +381,52 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
                       <option value="processing">🚚 En cours</option>
                       <option value="delivered">🏁 Livré</option>
                       <option value="cancelled">❌ Annulé</option>
+                      <option value="cancelled_by_customer" disabled>👤 Client: Annulé</option>
+                      <option value="deleted_by_customer" disabled>👤 Client: Masqué</option>
                     </select>
                   </div>
-                  <button 
-                    onClick={() => deleteOrder(order.id!)}
-                    className="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center hover:bg-red-100 transition-colors shrink-0"
-                  >
-                    <XCircle size={20} />
-                  </button>
+                  {confirmDeleteOrderId === order.id ? (
+                    <div className="flex gap-1 shrink-0">
+                      <button 
+                        onClick={() => deleteOrder(order.id!)}
+                        className="px-3 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase ring-2 ring-red-100"
+                      >
+                        OK
+                      </button>
+                      <button 
+                        onClick={() => setConfirmDeleteOrderId(null)}
+                        className="px-3 bg-gray-200 text-gray-600 rounded-xl text-[10px] font-bold"
+                      >
+                        ANNULER
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setConfirmDeleteOrderId(order.id!)}
+                      className="w-12 h-12 bg-red-50 text-red-500 rounded-xl flex items-center justify-center hover:bg-red-100 transition-colors shrink-0"
+                      title="Supprimer la commande"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         </>
-      ) : (
+      ) : activeTab === 'products' ? (
         /* Products List */
         <div className="flex flex-col gap-4 p-4">
           {products.map(product => (
             <div key={product.id} className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 flex gap-4">
-              <img src={product.imageUrl} className="w-24 h-24 rounded-xl object-cover shrink-0 bg-gray-100" />
+              <div className="relative shrink-0">
+                <img src={product.imageUrl} className="w-24 h-24 rounded-xl object-cover bg-gray-100" />
+                {product.images && product.images.length > 0 && (
+                  <div className="absolute -top-2 -right-2 bg-brand text-white text-[8px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                    +{product.images.length}
+                  </div>
+                )}
+              </div>
               <div className="flex flex-col justify-between flex-1 py-1">
                 <div>
                   <h3 className="text-sm font-bold line-clamp-1">{product.name}</h3>
@@ -332,13 +453,31 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
                   >
                     Modifier
                   </button>
-                  <button 
-                    onClick={() => deleteProduct(product.id)}
-                    className="p-2 bg-red-50 text-red-500 rounded-lg"
-                  >
-                    <XCircle size={18} />
-                  </button>
-                </div>
+                    {confirmDeleteId === product.id ? (
+                      <div className="flex gap-1 flex-1">
+                        <button 
+                          onClick={() => deleteProduct(product.id)}
+                          className="flex-1 py-2 bg-red-600 text-white rounded-lg text-[10px] font-black uppercase ring-2 ring-red-100"
+                        >
+                          CONFIRMER
+                        </button>
+                        <button 
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="px-2 py-2 bg-gray-200 text-gray-600 rounded-lg text-[10px] font-bold"
+                        >
+                          X
+                        </button>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={() => setConfirmDeleteId(product.id!)}
+                        className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
+                        title="Supprimer le produit"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
+                  </div>
               </div>
             </div>
           ))}
@@ -347,6 +486,85 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
               Aucun produit en boutique
             </div>
           )}
+        </div>
+      ) : (
+        /* Admins Section */
+        <div className="flex flex-col gap-6 p-4 max-w-2xl mx-auto w-full">
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+            <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <ShieldCheck className="text-brand" size={24} />
+              Ajouter un administrateur
+            </h2>
+            <form onSubmit={addAdmin} className="flex gap-2">
+              <input 
+                type="email"
+                placeholder="Email du nouvel admin..."
+                required
+                className="flex-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand/20"
+                value={newAdminEmail}
+                onChange={e => setNewAdminEmail(e.target.value)}
+              />
+              <button 
+                type="submit"
+                disabled={isAddingAdmin}
+                className="p-3 bg-brand text-white rounded-xl shadow-lg shadow-brand/20 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <UserPlus size={24} />
+              </button>
+            </form>
+            <p className="text-[10px] text-gray-400 mt-3 italic">
+              L'email doit être celui utilisé par la personne pour se connecter via Google.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest px-2">Liste des accès</h3>
+            
+            {/* Primary Admin */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-brand/20 flex justify-between items-center bg-brand/5">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-full bg-brand text-white flex items-center justify-center font-bold">
+                  DS
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-bold text-dark">digitalsoutien@gmail.com</span>
+                  <span className="text-[10px] text-brand font-black uppercase tracking-wider">Créateur / Root</span>
+                </div>
+              </div>
+              <div className="p-2 text-brand">
+                <ShieldCheck size={20} />
+              </div>
+            </div>
+
+            {/* Other Admins */}
+            {admins.map(admin => (
+              <div key={admin.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex justify-between items-center group">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center font-bold">
+                    {admin.email.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-dark">{admin.email}</span>
+                    <span className="text-[10px] text-gray-400">Ajouté par: {admin.addedBy || 'Système'}</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => removeAdmin(admin.email)}
+                  className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                  title="Révoquer l'accès"
+                >
+                  <Trash2 size={20} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-100 flex gap-3">
+            <Clock size={20} className="text-yellow-600 shrink-0" />
+            <p className="text-xs text-yellow-800 leading-relaxed">
+              <strong>Conseil:</strong> Ne partagez l'accès qu'à des personnes de confiance. Un administrateur peut modifier vos produits, prix et voir toutes les commandes clients.
+            </p>
+          </div>
         </div>
       )}
 

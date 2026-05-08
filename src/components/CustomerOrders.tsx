@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Package, Truck, CheckCircle2, Clock, ChevronLeft, LogOut, ShoppingBag } from 'lucide-react';
-import { db } from '../lib/firebase';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { Package, Truck, CheckCircle2, Clock, ChevronLeft, LogOut, ShoppingBag, X, Trash2, Ban } from 'lucide-react';
+import { db, auth } from '../lib/firebase';
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { Order } from '../types';
+import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 
 interface CustomerOrdersProps {
   userEmail: string;
@@ -19,9 +20,12 @@ export default function CustomerOrders({ userEmail, onBack, onLogout }: Customer
     if (!userEmail) return;
 
     // We filter by email which matches the order email
+    // We also exclude orders hidden by the customer
     const q = query(
       collection(db, 'orders'),
       where('email', '==', userEmail),
+      where('status', '!=', 'deleted_by_customer'),
+      orderBy('status'), // Needed because of the != filter
       orderBy('createdAt', 'desc')
     );
 
@@ -38,8 +42,33 @@ export default function CustomerOrders({ userEmail, onBack, onLogout }: Customer
     switch (status) {
       case 'delivered': return { icon: <CheckCircle2 className="text-green-500" />, label: 'Livré', color: 'bg-green-50 text-green-700' };
       case 'processing': return { icon: <Truck className="text-blue-500" />, label: 'En cours', color: 'bg-blue-50 text-blue-700' };
-      case 'cancelled': return { icon: <X className="text-red-500" />, label: 'Annulé', color: 'bg-red-50 text-red-700' };
+      case 'cancelled': 
+      case 'cancelled_by_customer': return { icon: <X className="text-red-500" />, label: 'Annulé', color: 'bg-red-50 text-red-700' };
       default: return { icon: <Clock className="text-orange-500" />, label: 'En attente', color: 'bg-orange-50 text-orange-700' };
+    }
+  };
+
+  const cancelOrder = async (orderId: string) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir annuler cette commande ?")) return;
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        status: 'cancelled_by_customer',
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
+    }
+  };
+
+  const hideOrder = async (orderId: string) => {
+    if (!window.confirm("Voulez-vous retirer cette commande de votre historique ? Elle restera visible pour l'administration.")) return;
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        status: 'deleted_by_customer',
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
     }
   };
 
@@ -101,8 +130,12 @@ export default function CustomerOrders({ userEmail, onBack, onLogout }: Customer
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center">
-                        <Package size={24} className="text-gray-400" />
+                      <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center overflow-hidden">
+                        {order.productImage ? (
+                          <img src={order.productImage} className="w-full h-full object-cover" />
+                        ) : (
+                          <Package size={24} className="text-gray-400" />
+                        )}
                       </div>
                       <div>
                         <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Commande #{order.id?.slice(-6).toUpperCase()}</span>
@@ -132,11 +165,32 @@ export default function CustomerOrders({ userEmail, onBack, onLogout }: Customer
                   </div>
 
                   {order.status === 'pending' && (
-                    <div className="mt-4 flex items-center gap-2 p-3 bg-brand/5 rounded-2xl border border-brand/10">
-                      <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-                      <p className="text-[10px] text-brand font-medium">
-                        Votre commande est en attente de traitement par nos équipes.
-                      </p>
+                    <div className="mt-4 flex flex-col gap-4">
+                      <div className="flex items-center gap-2 p-3 bg-brand/5 rounded-2xl border border-brand/10">
+                        <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
+                        <p className="text-[10px] text-brand font-medium">
+                          Votre commande est en attente de traitement par nos équipes.
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => cancelOrder(order.id!)}
+                        className="flex items-center justify-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-2xl text-xs font-bold border border-red-100"
+                      >
+                        <Ban size={14} />
+                        Annuler la commande
+                      </button>
+                    </div>
+                  )}
+
+                  {(order.status === 'delivered' || order.status === 'cancelled' || order.status === 'cancelled_by_customer') && (
+                    <div className="mt-4">
+                      <button 
+                        onClick={() => hideOrder(order.id!)}
+                        className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gray-50 text-gray-500 rounded-2xl text-xs font-bold border border-gray-100"
+                      >
+                        <Trash2 size={14} />
+                        Retirer de l'historique
+                      </button>
                     </div>
                   )}
                 </motion.div>
