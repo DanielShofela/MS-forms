@@ -26,8 +26,7 @@ import {
   ShieldCheck,
   UserPlus,
   Bell,
-  BellRing,
-  WifiOff
+  BellRing
 } from 'lucide-react';
 
 export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
@@ -37,28 +36,10 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
   const [admins, setAdmins] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<{id: string, text: string, time: Date}[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const lastOrderCount = React.useRef(-1);
-  const prevOnlineState = React.useRef(true);
 
-  // Sound & Speech Notification Helper
-  const speakText = (text: string) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel(); // Stop current speech
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'fr-FR';
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-      
-      const voices = window.speechSynthesis.getVoices();
-      const preferredVoice = voices.find(v => v.name.includes('Alex') || v.name.includes('Thomas') || v.name.includes('Premium'));
-      if (preferredVoice) utterance.voice = preferredVoice;
-      
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
+  // Sound & Speech Notification
   const playNotification = (customerName: string) => {
     // Visual Notification
     const newNotif = {
@@ -67,34 +48,22 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
       time: new Date()
     };
     setNotifications(prev => [newNotif, ...prev].slice(0, 50));
-    speakText(`Nouvelle commande reçue de la part de ${customerName}`);
+
+    // Audible Notification (Alex style TTS)
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(`Nouvelle commande reçue de la part de ${customerName}`);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      
+      // Try to find a high quality voice
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v => v.name.includes('Alex') || v.name.includes('Thomas') || v.name.includes('Premium'));
+      if (preferredVoice) utterance.voice = preferredVoice;
+      
+      window.speechSynthesis.speak(utterance);
+    }
   };
-
-  // Connectivity Monitoring
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      if (!prevOnlineState.current) {
-        speakText("Connexion rétablie. Le site est à nouveau opérationnel.");
-      }
-      prevOnlineState.current = true;
-    };
-
-    const handleOffline = () => {
-      setIsOnline(false);
-      speakText("Attention : Connexion perdue. Le site est injoignable.");
-      prevOnlineState.current = false;
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    setIsOnline(navigator.onLine);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [showProductForm, setShowProductForm] = useState(false);
@@ -270,15 +239,7 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
       {/* Header */}
       <header className="bg-dark text-white px-6 py-6 flex justify-between items-center sticky top-0 z-20">
         <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl">Dashboard Admin</h1>
-            {!isOnline && (
-              <span className="flex items-center gap-1 bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">
-                <WifiOff size={10} />
-                HORS-LIGNE
-              </span>
-            )}
-          </div>
+          <h1 className="text-xl">Dashboard Admin</h1>
           <span className="text-xs text-gray-400">MAISON SMART + | Back-office</span>
         </div>
         <div className="flex gap-2 relative">
