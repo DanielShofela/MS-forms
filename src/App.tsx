@@ -124,13 +124,14 @@ export default function App() {
     } catch (error: any) {
       console.error("Login failed", error);
       if (error.code === 'auth/network-request-failed') {
-        setAuthError("Erreur réseau. Veuillez vérifier votre connexion ou assurez-vous que ce domaine est autorisé dans votre console Firebase.");
+        const currentHostname = window.location.hostname;
+        setAuthError(`Erreur réseau (auth/network-request-failed). \n\nIMPORTANT : Vous devez autoriser ce domaine dans votre Console Firebase :\n1. Allez dans Auth > Paramètres > Domaines autorisés\n2. Ajoutez : ${currentHostname}\n\nSi c'est déjà fait, vérifiez qu'un bloqueur de publicités ne bloque pas la connexion.`);
       } else if (error.code === 'auth/popup-blocked') {
         setAuthError("Le popup de connexion a été bloqué par votre navigateur. Veuillez l'autoriser.");
       } else if (error.code === 'auth/popup-closed-by-user') {
         setAuthError("La fenêtre de connexion a été fermée avant la fin du processus.");
       } else {
-        setAuthError("Une erreur est survenue lors de la connexion.");
+        setAuthError(`Erreur: ${error.message || "Une erreur est survenue lors de la connexion."}`);
       }
     }
   };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../lib/firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { Order, Product, Admin } from '../types';
@@ -23,7 +24,9 @@ import {
   Package,
   Trash2,
   ShieldCheck,
-  UserPlus
+  UserPlus,
+  Bell,
+  BellRing
 } from 'lucide-react';
 
 export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
@@ -31,7 +34,36 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [admins, setAdmins] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<{id: string, text: string, time: Date}[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const lastOrderCount = React.useRef(-1);
+
+  // Sound & Speech Notification
+  const playNotification = (customerName: string) => {
+    // Visual Notification
+    const newNotif = {
+      id: Math.random().toString(36).substr(2, 9),
+      text: `Nouvelle commande de ${customerName}`,
+      time: new Date()
+    };
+    setNotifications(prev => [newNotif, ...prev].slice(0, 50));
+
+    // Audible Notification (Alex style TTS)
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(`Nouvelle commande reçue de la part de ${customerName}`);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      
+      // Try to find a high quality voice
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v => v.name.includes('Alex') || v.name.includes('Thomas') || v.name.includes('Premium'));
+      if (preferredVoice) utterance.voice = preferredVoice;
+      
+      window.speechSynthesis.speak(utterance);
+    }
+  };
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [showProductForm, setShowProductForm] = useState(false);
@@ -47,6 +79,14 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
         id: doc.id,
         ...doc.data()
       })) as Order[];
+      
+      // Trigger notification if order count increases
+      if (lastOrderCount.current !== -1 && ordersData.length > lastOrderCount.current) {
+        const latestOrder = ordersData[0];
+        playNotification(latestOrder.customerName);
+      }
+      
+      lastOrderCount.current = ordersData.length;
       setOrders(ordersData);
       if (activeTab === 'orders') setLoading(false);
     }, (error) => {
@@ -202,7 +242,22 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
           <h1 className="text-xl">Dashboard Admin</h1>
           <span className="text-xs text-gray-400">MAISON SMART + | Back-office</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 relative">
+          <button 
+            onClick={() => setShowNotifications(!showNotifications)} 
+            className={cn(
+              "p-2 rounded-lg relative",
+              notifications.length > 0 ? "bg-brand/10 text-brand" : "bg-white/10 text-white"
+            )}
+            title="Notifications"
+          >
+            {notifications.length > 0 ? <BellRing size={20} className="animate-bounce" /> : <Bell size={20} />}
+            {notifications.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-dark">
+                {notifications.length}
+              </span>
+            )}
+          </button>
           <button 
             onClick={() => {
               setEditingProduct(null);
@@ -216,6 +271,55 @@ export default function AdminPanel({ onLogout }: { onLogout: () => void }) {
           <button onClick={onLogout} className="p-2 bg-white/10 rounded-lg">
             <LogOut size={20} />
           </button>
+
+          {/* Notification dropdown */}
+          <AnimatePresence>
+            {showNotifications && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden"
+              >
+                <div className="p-4 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+                  <h3 className="font-bold text-dark flex items-center gap-2">
+                    <Bell size={16} className="text-brand" />
+                    Notifications
+                  </h3>
+                  <button 
+                    onClick={() => setNotifications([])}
+                    className="text-[10px] uppercase font-black tracking-widest text-gray-400 hover:text-brand"
+                  >
+                    Effacer
+                  </button>
+                </div>
+                <div className="max-h-96 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="p-10 text-center flex flex-col items-center gap-3">
+                      <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center text-gray-200">
+                        <Bell size={24} />
+                      </div>
+                      <p className="text-xs text-gray-400 font-medium italic">Aucune nouvelle notification</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col">
+                      {notifications.map((notif) => (
+                        <div key={notif.id} className="p-4 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+                          <p className="text-sm text-dark font-medium leading-snug">{notif.text}</p>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Clock size={10} className="text-gray-300" />
+                            <span className="text-[10px] text-gray-400">
+                              {notif.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </header>
 

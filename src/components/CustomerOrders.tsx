@@ -61,7 +61,7 @@ export default function CustomerOrders({ userEmail, onBack, onLogout }: Customer
   };
 
   const hideOrder = async (orderId: string) => {
-    if (!window.confirm("Voulez-vous retirer cette commande de votre historique ? Elle restera visible pour l'administration.")) return;
+    if (!window.confirm("Voulez-vous retirer cette commande de votre historique ?")) return;
     try {
       await updateDoc(doc(db, 'orders', orderId), {
         status: 'deleted_by_customer',
@@ -96,13 +96,6 @@ export default function CustomerOrders({ userEmail, onBack, onLogout }: Customer
       </header>
 
       <div className="flex-1 px-4 py-8">
-        <div className="mb-6 flex items-center gap-3 p-4 bg-blue-50 border border-blue-100 rounded-2xl">
-          <ShieldCheck className="text-blue-500 shrink-0" size={20} />
-          <p className="text-[11px] text-blue-800 leading-tight">
-            Toutes vos commandes et demandes sont transmises directement à l'administrateur pour traitement.
-          </p>
-        </div>
-
         {loading ? (
           <div className="flex flex-col items-center justify-center p-20 gap-4">
             <div className="w-10 h-10 border-4 border-brand border-t-transparent rounded-full animate-spin"></div>
@@ -171,14 +164,16 @@ export default function CustomerOrders({ userEmail, onBack, onLogout }: Customer
                     </div>
                   </div>
 
-                  {order.status === 'pending' && (
+                  {order.status !== 'cancelled' && order.status !== 'cancelled_by_customer' && order.status !== 'deleted_by_customer' && (
                     <div className="mt-4 flex flex-col gap-4">
-                      <div className="flex items-center gap-2 p-3 bg-brand/5 rounded-2xl border border-brand/10">
-                        <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-                        <p className="text-[10px] text-brand font-medium">
-                          Votre commande est en attente de traitement par nos équipes.
-                        </p>
-                      </div>
+                      {order.status === 'pending' && (
+                        <div className="flex items-center gap-2 p-3 bg-brand/5 rounded-2xl border border-brand/10">
+                          <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
+                          <p className="text-[10px] text-brand font-medium">
+                            Votre commande est en attente de traitement par nos équipes.
+                          </p>
+                        </div>
+                      )}
                       <button 
                         onClick={() => cancelOrder(order.id!)}
                         className="flex items-center justify-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-2xl text-xs font-bold border border-red-100"
